@@ -6,6 +6,7 @@ from django.urls import reverse
 from django import forms
 from django.conf import settings
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.core.cache import cache
 
 from posts.models import Post, Group, User, Comment, Follow
 
@@ -164,27 +165,67 @@ class PostPagesTests(TestCase):
         r_2 = response2.content
         self.assertEqual(r_1, r_2)
 
-    def test_follow_page(self):
-        # Проверяем, что страница подписок пуста
+
+class FollowTest(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.post_autor = User.objects.create(username='autor')
+        cls.post_follower = User.objects.create(username='follower')
+        cls.post_not_follower = User.objects.create(username='not_follower')
+        cls.post = Post.objects.create(text='Тестовый текст',
+                                       author=cls.post_autor,)
+
+    def setUp(self):
+        self.authorized_client = Client()
+        self.authorized_client.force_login(self.post_follower)
+        self.follower_client = Client()
+        self.follower_client.force_login(self.post_autor)
+        self.not_follower_client = Client()
+        self.not_follower_client.force_login(self.post_not_follower)
+        cache.clear()
+
+    def test_follow_on_user(self):
+        """Проверка подписки на пользователя."""
+        count_follow = Follow.objects.count()
+        self.follower_client.post(
+            reverse('posts:profile_follow',
+                    kwargs={'username': self.post_follower}))
+        follow = Follow.objects.all().latest('id')
+        self.assertEqual(Follow.objects.count(), count_follow + 1)
+        self.assertEqual(follow.author_id, self.post_follower.id)
+        self.assertEqual(follow.user_id, self.post_autor.id)
+
+    def test_unfollow_on_user(self):
+        """Проверка отписки от пользователя."""
+        Follow.objects.create(user=self.post_autor,
+                              author=self.post_follower)
+        count_follow = Follow.objects.count()
+        self.follower_client.post(
+            reverse('posts:profile_unfollow',
+                    kwargs={'username': self.post_follower}))
+        self.assertEqual(Follow.objects.count(), count_follow - 1)
+
+    def test_posts_on_followers(self):
+        """Проверка записей у тех кто подписан на авторов."""
+        Follow.objects.create(user=self.post_follower,
+                              author=self.post_autor)
         response = self.authorized_client.get(reverse('posts:follow_index'))
+        follow = response.context['page_obj']
+        self.assertIn(self.post, follow)
+
+    def test_posts_on_unfollowers(self):
+        """Проверка записей у тех кто не подписан на авторов."""
+        Follow.objects.create(user=self.post_follower,
+                              author=self.post_autor)
+        response = self.not_follower_client.get(reverse('posts:follow_index'))
+        not_follow = response.context['page_obj']
+        self.assertNotIn(self.post, not_follow)
+
+    def test_not_follower_to_yourself(self):
+        """Проверяем, что нельзя подписаться на себя."""
+        response = self.follower_client.get(reverse('posts:follow_index'))
         self.assertEqual(len(response.context['page_obj']), 0)
-        # Проверка подписки на автора поста
-        Follow.objects.get_or_create(user=self.user, author=self.post.author)
-        r_2 = self.authorized_client.get(reverse('posts:follow_index'))
-        self.assertEqual(len(r_2.context['page_obj']), 1)
-        # проверка подписки у юзера-фоловера
-        self.assertIn(self.post, r_2.context['page_obj'])
-
-        # Проверка что пост не появился в избранных у юзера-обычного
-        outsider = User.objects.create(username='NoName')
-        self.authorized_client.force_login(outsider)
-        r_2 = self.authorized_client.get(reverse('posts:follow_index'))
-        self.assertNotIn(self.post, r_2.context['page_obj'])
-
-        # Проверка отписки от автора поста
-        Follow.objects.all().delete()
-        r_3 = self.authorized_client.get(reverse('posts:follow_index'))
-        self.assertEqual(len(r_3.context['page_obj']), 0)
 
 
 class PaginatorViewsTest(TestCase):
@@ -253,7 +294,7 @@ TEMP_MEDIA_ROOT = tempfile.mkdtemp(dir=settings.BASE_DIR)
 
 
 @override_settings(MEDIA_ROOT=TEMP_MEDIA_ROOT)
-class PostMedisTests(TestCase):
+class PostMediaTests(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()

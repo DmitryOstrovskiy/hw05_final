@@ -2,12 +2,11 @@ from django.core.paginator import Paginator
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
 
-from .models import Post, Group, User, Comment, Follow
+from .models import Post, Group, User, Follow
 from .forms import PostForm, CommentForm
 
 
 POSTS_PAGE = 10
-FIRST_THIRTY = 30
 
 
 def get_page_context(queryset, request):
@@ -40,7 +39,9 @@ def group_posts(request, slug):
 def profile(request, username):
     author = get_object_or_404(User, username=username)
     posts = author.posts.all()
-    following = author.following.exists()
+    following = (request.user.is_authenticated
+                 and request.user.follower.filter(author=author).exists()
+                 )
     context = {
         'author': author,
         'page_obj': get_page_context(posts, request),
@@ -53,7 +54,7 @@ def profile(request, username):
 def post_detail(request, post_id):
     post = get_object_or_404(Post, pk=post_id)
     form = CommentForm(request.POST or None)
-    comments = Comment.objects.filter(post=post)
+    comments = post.comments.all()
     context = {
         'post': post,
         'form': form,
@@ -112,7 +113,6 @@ def follow_index(request):
     posts = Post.objects.filter(author_id__in=follower)
     context = {
         'page_obj': get_page_context(posts, request),
-        'title': 'Избранные посты',
     }
     return render(request, 'posts/follow.html', context)
 
