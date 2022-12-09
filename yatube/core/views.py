@@ -7,7 +7,7 @@ def page_not_found(request, exception):
         request,
         'core/404.html',
         {'path': request.path},
-        status=404)
+        status=HTTPStatus.NOT_FOUND.value)
 
 
 def csrf_failure(request, reason=''):
