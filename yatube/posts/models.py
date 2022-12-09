@@ -75,13 +75,13 @@ class Follow(models.Model):
         related_name='following'
     )
 
-    def __str__(self):
-        return f'{self.user}-->{self.author}'
-
     class Meta(object):
-        constraints = [
+        constraints = (
             models.UniqueConstraint(
                 fields=['user', 'author'],
                 name='unique follow'
             ),
-        ]
+        )
+
+    def __str__(self):
+        return f'{self.user}-->{self.author}'

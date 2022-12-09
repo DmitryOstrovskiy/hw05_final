@@ -191,10 +191,14 @@ class FollowTest(TestCase):
         self.follower_client.post(
             reverse('posts:profile_follow',
                     kwargs={'username': self.post_follower}))
-        follow = Follow.objects.all().latest('id')
+        # follow = Follow.objects.all().latest('id')
         self.assertEqual(Follow.objects.count(), count_follow + 1)
-        self.assertEqual(follow.author_id, self.post_follower.id)
-        self.assertEqual(follow.user_id, self.post_autor.id)
+        # self.assertEqual(follow.author_id, self.post_follower.id)
+        # self.assertEqual(follow.user_id, self.post_autor.id)
+        self.assertTrue(Follow.objects.filter(
+            user=self.post_autor,
+            author=self.post_follower).exists()
+        )
 
     def test_unfollow_on_user(self):
         """Проверка отписки от пользователя."""
@@ -205,6 +209,10 @@ class FollowTest(TestCase):
             reverse('posts:profile_unfollow',
                     kwargs={'username': self.post_follower}))
         self.assertEqual(Follow.objects.count(), count_follow - 1)
+        self.assertFalse(Follow.objects.filter(
+            user=self.post_autor,
+            author=self.post_follower).exists()
+        )
 
     def test_posts_on_followers(self):
         """Проверка записей у тех кто подписан на авторов."""
@@ -226,6 +234,10 @@ class FollowTest(TestCase):
         """Проверяем, что нельзя подписаться на себя."""
         response = self.follower_client.get(reverse('posts:follow_index'))
         self.assertEqual(len(response.context['page_obj']), 0)
+        self.assertFalse(Follow.objects.filter(
+            user=self.post_autor,
+            author=self.post_autor).exists()
+        )
 
 
 class PaginatorViewsTest(TestCase):
